@@ -3,7 +3,7 @@ import React from 'react';
 export default function RiskChart({ series = [] }) {
   // Prepare simple SVG chart: x by index, temp line, rain bars
   const width = 500;
-  const height = 200;
+  const height = 220;
   const padding = 30;
   const points = series.slice(0, 20); // limit to 20 points
   const temps = points.map(p => p.temp ?? 0);
@@ -21,7 +21,13 @@ export default function RiskChart({ series = [] }) {
 
   return (
     <div className="w-full rounded-lg">
-      <svg width={width} height={height} className="bg-blue-950/30 rounded-lg">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        width="100%"
+        height={height}
+        className="bg-blue-950/30 rounded-lg"
+        preserveAspectRatio="xMidYMid meet"
+      >
         {/* Axes */}
         <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#4b5563" strokeWidth="1" />
         <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#4b5563" strokeWidth="1" />
