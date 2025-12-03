@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Alerts from './pages/Alerts'
 import SafetyTips from './pages/SafetyTips'
 import Admin from './pages/Admin'
+import Profile from './pages/Profile'
 import './App.css'
 
 import AppBar from '@mui/material/AppBar'
@@ -26,6 +27,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard'
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive'
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
+import PersonIcon from '@mui/icons-material/Person'
 import { useLocation } from 'react-router-dom'
 
 function App() {
@@ -35,6 +37,7 @@ function App() {
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/alerts', label: 'Alerts' },
     { to: '/safetytips', label: 'Safety Tips' },
+    { to: '/profile', label: 'Profile' },
     { to: '/admin', label: 'Admin' },
   ]
 
@@ -45,6 +48,7 @@ function App() {
     if (to === '/alerts') return <NotificationsActiveIcon />
     if (to === '/safetytips') return <HealthAndSafetyIcon />
     if (to === '/admin') return <AdminPanelSettingsIcon />
+    if (to === '/profile') return <PersonIcon />
     return null
   }
 
@@ -125,6 +129,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/safetytips" element={<SafetyTips />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/admin" element={<Admin />} />
         </Routes>
       </div>

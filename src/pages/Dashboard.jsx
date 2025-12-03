@@ -28,6 +28,9 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [favorites, setFavorites] = useState(() => {
+    try { const raw = localStorage.getItem('floodsense_favorites'); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  });
 
   const fetchWeather = (c) => {
     setLoading(true);
@@ -48,7 +51,28 @@ export default function Dashboard() {
     setError(null);
     api.get('/api/risk', { params: { lat: c.lat, lon: c.lon } })
       .then(res => {
-        setRisk(res.data);
+        setRisk(prev => {
+          const next = res.data;
+          try {
+            if (Notification && Notification.permission === 'granted' && prev?.category && next?.category) {
+              const escalate = (from, to) => {
+                const order = ['Low', 'Medium', 'High', 'Severe'];
+                return order.indexOf(to) > order.indexOf(from);
+              };
+              if (escalate(prev.category, next.category)) {
+                const body = `Risk increased from ${prev.category} to ${next.category}.`;
+                if (navigator.serviceWorker?.ready) {
+                  navigator.serviceWorker.ready.then(reg => {
+                    reg.showNotification('FloodSense Risk Update', { body, icon: '/images/logo.png', badge: '/images/logo.png' });
+                  });
+                } else {
+                  new Notification('FloodSense Risk Update', { body });
+                }
+              }
+            }
+          } catch {}
+          return next;
+        });
         setLoading(false);
       })
       .catch(() => {
@@ -88,6 +112,7 @@ export default function Dashboard() {
   };
 
   const isValidCoords = (c) => typeof c.lat === 'number' && typeof c.lon === 'number' && !Number.isNaN(c.lat) && !Number.isNaN(c.lon);
+  const persistFavorites = (arr) => { try { localStorage.setItem('floodsense_favorites', JSON.stringify(arr)); } catch {} };
 
   // Persist coords whenever they change (only if valid)
   useEffect(() => {
@@ -153,6 +178,39 @@ export default function Dashboard() {
                 ))}
               </ul>
             )}
+            {/* Favorites bar */}
+            <div className="mt-3 flex flex-wrap gap-2 items-center">
+              {favorites.map((f, i) => (
+                <button key={i} className="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs" onClick={() => {
+                  const candidate = { lat: f.lat, lon: f.lon };
+                  setLatInput(candidate.lat); setLonInput(candidate.lon);
+                  setCoords(candidate); fetchWeather(candidate); fetchRisk(candidate); fetchForecast(candidate);
+                  setGeoStatus(`Favorite: ${f.name}`);
+                }}>{f.name}</button>
+              ))}
+              <button
+                className="ml-auto px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs"
+                onClick={() => {
+                  const name = prompt('Name this location (e.g., Home, Market):');
+                  if (!name) return;
+                  const fav = { name, lat: Number(latInput), lon: Number(lonInput) };
+                  if (!isValidCoords(fav)) return;
+                  const next = [...favorites, fav];
+                  setFavorites(next); persistFavorites(next);
+                }}
+              >+ Save Current</button>
+              {favorites.length > 0 && (
+                <button
+                  className="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs"
+                  onClick={() => {
+                    const name = prompt('Remove favorite by name:');
+                    if (!name) return;
+                    const next = favorites.filter(f => f.name !== name);
+                    setFavorites(next); persistFavorites(next);
+                  }}
+                >Remove Favorite</button>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex justify-center mb-5 px-2">
@@ -258,67 +316,81 @@ export default function Dashboard() {
         {error && (
           <div className="text-red-400 text-lg">{error}</div>
         )}
-
-        {risk && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
-            <div className="bg-gray-900 rounded-xl p-6 shadow">
-              <h2 className="text-xl font-semibold text-blue-300 mb-2">Flood Risk</h2>
-              <div className="text-5xl font-bold mb-2">
-                <span className={
-                  risk.category === 'Low' ? 'text-green-400' :
-                  risk.category === 'Medium' ? 'text-yellow-400' :
-                  risk.category === 'High' ? 'text-orange-400' : 'text-red-500'
-                }>{risk.riskScore}</span>
-              </div>
-              <div className="text-sm text-gray-300">Category: {risk.category}</div>
-              <div className="text-xs text-gray-500">Updated: {new Date(risk.timestamp).toLocaleString()}</div>
-            </div>
-            <div className="bg-gray-900 rounded-xl p-6 shadow">
-              <h2 className="text-xl font-semibold text-blue-300 mb-2">Factors</h2>
-              <div className="text-gray-300">Rain: {risk.factors.rain_mm} mm</div>
-              <div className="text-gray-300">Humidity: {risk.factors.humidity}%</div>
-              <div className="text-gray-300">Wind: {risk.factors.wind} m/s</div>
-              <div className="text-gray-300">Recent Avg: {risk.factors.recentAccumulation} mm</div>
-            </div>
-            <div className="bg-gray-900 rounded-xl p-6 shadow">
-              <h2 className="text-xl font-semibold text-blue-300 mb-2">Safety Tips</h2>
-              <ul className="list-disc list-inside text-gray-200">
-                {risk.tips.map((t, i) => (<li key={i}>{t}</li>))}
-              </ul>
-            </div>
+        {/* Notification opt-in */}
+        {typeof Notification !== 'undefined' && Notification.permission !== 'granted' && (
+          <div className="mt-2">
+            <button className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-1 rounded" onClick={async()=>{
+              try { await Notification.requestPermission(); } catch {}
+            }}>Enable Notifications</button>
           </div>
         )}
-        {weather && weather.main && weather.weather && weather.weather[0] ? (
-          <div className="flex flex-col md:flex-row gap-6 justify-center items-center mb-4">
-            <div className="bg-gray-900 rounded-xl p-6 shadow w-full md:w-1/3">
-              <h2 className="text-xl font-semibold text-blue-300 mb-2">Current Weather</h2>
-              <div className="text-4xl font-bold text-yellow-400 mb-2">
-                {weather.main.temp}°C
+
+        {(risk || (weather && weather.main && weather.weather && weather.weather[0])) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-6">
+            {risk && (
+              <div className="bg-gray-900 rounded-xl p-6 shadow">
+                <h2 className="text-xl font-semibold text-blue-300 mb-2">Flood Risk</h2>
+                <div className="text-5xl font-bold mb-2">
+                  <span className={
+                    risk.category === 'Low' ? 'text-green-400' :
+                    risk.category === 'Medium' ? 'text-yellow-400' :
+                    risk.category === 'High' ? 'text-orange-400' : 'text-red-500'
+                  }>{risk.riskScore}</span>
+                </div>
+                <div className="text-sm text-gray-300">Category: {risk.category}</div>
+                <div className="text-xs text-gray-500">Updated: {new Date(risk.timestamp).toLocaleString()}</div>
               </div>
-              <div className="text-gray-400">
-                {weather.weather[0].description}
+            )}
+
+            {risk && (
+              <div className="bg-gray-900 rounded-xl p-6 shadow">
+                <h2 className="text-xl font-semibold text-blue-300 mb-2">Factors</h2>
+                <div className="text-gray-300">Rain: {risk.factors.rain_mm} mm</div>
+                <div className="text-gray-300">Humidity: {risk.factors.humidity}%</div>
+                <div className="text-gray-300">Wind: {risk.factors.wind} m/s</div>
+                <div className="text-gray-300">Recent Avg: {risk.factors.recentAccumulation} mm</div>
               </div>
-              <div className="text-gray-400">
-                Humidity: {weather.main.humidity}%
+            )}
+
+            {weather && weather.main && weather.weather && weather.weather[0] && (
+              <div className="bg-gray-900 rounded-xl p-6 shadow">
+                <h2 className="text-xl font-semibold text-blue-300 mb-2">Current Weather</h2>
+                <div className="text-4xl font-bold text-yellow-400 mb-2">{weather.main.temp}°C</div>
+                <div className="text-gray-400">{weather.weather[0].description}</div>
+                <div className="text-gray-400">Humidity: {weather.main.humidity}%</div>
+                <div className="text-gray-400">Wind: {weather.wind ? `${weather.wind.speed} m/s` : 'N/A'}</div>
               </div>
-              <div className="text-gray-400">
-                Wind: {weather.wind ? `${weather.wind.speed} m/s` : 'N/A'}
+            )}
+
+            {weather && weather.main && (
+              <div className="bg-gray-900 rounded-xl p-6 shadow">
+                <h2 className="text-xl font-semibold text-blue-300 mb-2">Location</h2>
+                <div className="text-2xl font-bold text-green-400 mb-2">{weather.name}</div>
+                <div className="text-gray-400">Country: {weather.sys && weather.sys.country ? weather.sys.country : 'N/A'}</div>
               </div>
-            </div>
-            <div className="bg-gray-900 rounded-xl p-6 shadow w-full md:w-1/3">
-              <h2 className="text-xl font-semibold text-blue-300 mb-2">Location</h2>
-              <div className="text-2xl font-bold text-green-400 mb-2">{weather.name}</div>
-              <div className="text-gray-400">Country: {weather.sys && weather.sys.country ? weather.sys.country : 'N/A'}</div>
-            </div>
-            <div className="bg-gray-900 rounded-xl p-6 shadow w-full md:w-1/3">
-              <h2 className="text-xl font-semibold text-blue-300 mb-2">Clouds</h2>
-              <div className="text-2xl font-bold text-red-400 mb-2">{weather.clouds && typeof weather.clouds.all !== 'undefined' ? `${weather.clouds.all}%` : 'N/A'}</div>
-              <div className="text-gray-400">Visibility: {typeof weather.visibility !== 'undefined' ? `${weather.visibility}m` : 'N/A'}</div>
-            </div>
+            )}
+
+            {weather && (
+              <div className="bg-gray-900 rounded-xl p-6 shadow">
+                <h2 className="text-xl font-semibold text-blue-300 mb-2">Clouds</h2>
+                <div className="text-2xl font-bold text-red-400 mb-2">{weather.clouds && typeof weather.clouds.all !== 'undefined' ? `${weather.clouds.all}%` : 'N/A'}</div>
+                <div className="text-gray-400">Visibility: {typeof weather.visibility !== 'undefined' ? `${weather.visibility}m` : 'N/A'}</div>
+              </div>
+            )}
+
+            {risk && (
+              <div className="bg-gray-900 rounded-xl p-6 shadow">
+                <h2 className="text-xl font-semibold text-blue-300 mb-2">Safety Tips</h2>
+                <ul className="list-disc list-inside text-gray-200">
+                  {risk.tips.map((t, i) => (<li key={i}>{t}</li>))}
+                </ul>
+              </div>
+            )}
           </div>
-        ) : weather && !loading && !error ? (
+        )}
+        {(!weather || !weather.main || !weather.weather || !weather.weather[0]) && weather && !loading && !error && (
           <div className="text-red-400 text-lg">Weather data is unavailable for this location.</div>
-        ) : null}
+        )}
       </div>
 
       {/* Map & Chart Placeholders */}

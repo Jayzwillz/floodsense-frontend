@@ -163,8 +163,12 @@ export default function Landing() {
       <section className="py-8 px-4 max-w-4xl mx-auto text-center bg-gray-900/70 rounded-xl shadow mb-8">
         <h2 className="text-2xl font-bold mb-4 text-blue-300">Real-Time Dashboard Preview</h2>
         <p className="text-gray-300 mb-4">See your current flood risk, 24-hour prediction, 3–7 day forecast, map of high-risk zones, water-level history, and emergency contact button — all in one place.</p>
-        <div className="bg-gray-900 rounded-xl p-6 shadow-lg inline-block border border-gray-800">
-          <span className="text-gray-500">[Dashboard screenshot coming soon]</span>
+        <div className="bg-gray-900 rounded-xl p-3 shadow-lg inline-block border border-gray-800">
+          <img
+            src="/images/dashboardScreenshot.png"
+            alt="FloodSense Dashboard preview"
+            className="max-w-full h-auto rounded-lg border border-gray-800 object-contain"
+          />
         </div>
       </section>
 

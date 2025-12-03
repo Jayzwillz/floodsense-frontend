@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../lib/api';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from 'react-leaflet';
 
 export default function MapView({ center = { lat: 6.5244, lon: 3.3792 } }) {
   const [points, setPoints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dayIndex, setDayIndex] = useState(0); // 0 = Now, 1..4 = next days
+  const [clicked, setClicked] = useState(null); // { lat, lon, category, score, rain_mm }
+  const [clickedLoading, setClickedLoading] = useState(false);
 
   useEffect(() => {
     // Generate nearby offsets (~1-3km assuming ~0.01 deg ~ 1.1km near equator)
@@ -91,6 +94,43 @@ export default function MapView({ center = { lat: 6.5244, lon: 3.3792 } }) {
     return labels;
   }, []);
 
+  // Handle map clicks to fetch risk for that exact point
+  function ClickHandler() {
+    useMapEvents({
+      click: async (e) => {
+        const lat = e.latlng.lat;
+        const lon = e.latlng.lng;
+        setClickedLoading(true);
+        try {
+          if (dayIndex === 0) {
+            const res = await api.get('/api/risk', { params: { lat, lon } });
+            setClicked({ lat, lon, category: res.data?.category, score: res.data?.riskScore, rain_mm: null });
+          } else {
+            const res = await api.get('/api/forecast', { params: { lat, lon } });
+            const series = Array.isArray(res.data?.series) ? res.data.series : [];
+            const targetDay = dateForIndex(dayIndex);
+            const totalRain = series.reduce((sum, p) => {
+              const dt = p?.ts ? new Date(p.ts * 1000) : null;
+              if (dt && sameDay(dt, targetDay)) {
+                const r = typeof p.rain_mm === 'number' ? p.rain_mm : 0;
+                return sum + r;
+              }
+              return sum;
+            }, 0);
+            const cat = categoryFromRain(totalRain);
+            const sc = scoreFromRain(totalRain);
+            setClicked({ lat, lon, category: cat, score: sc, rain_mm: Math.round(totalRain * 10) / 10 });
+          }
+        } catch {
+          setClicked({ lat, lon, category: 'Unknown', score: null, rain_mm: null });
+        } finally {
+          setClickedLoading(false);
+        }
+      }
+    });
+    return null;
+  }
+
   const toRad = (deg) => (deg * Math.PI) / 180;
   const distanceKm = (lat1, lon1, lat2, lon2) => {
     const R = 6371;
@@ -143,22 +183,50 @@ export default function MapView({ center = { lat: 6.5244, lon: 3.3792 } }) {
       {loading ? (
         <div className="w-full h-56 md:h-64 bg-blue-950/40 rounded-lg flex items-center justify-center text-blue-300">Loading nearby risk...</div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full">
-          {points.map((p, i) => {
-            const dist = distanceKm(center.lat, center.lon, p.lat, p.lon);
-            const dir = bearingToCardinal(bearingDeg(center.lat, center.lon, p.lat, p.lon));
-            return (
-              <div key={i} className={`rounded-lg p-3 text-center text-gray-900 ${colorFor(p.category)}`}>
-                <div className="font-semibold">{p.category}</div>
-                <div className="text-xs">Score: {p.score ?? 'N/A'}</div>
-                {dayIndex > 0 && (
-                  <div className="text-[11px]">Rain: {p.rain_mm ?? 'N/A'} mm</div>
-                )}
-                <div className="text-[10px] mt-1">~{dist.toFixed(1)} km {dir}</div>
-                <div className="text-[10px] opacity-80">{p.lat.toFixed(4)}, {p.lon.toFixed(4)}</div>
-              </div>
-            );
-          })}
+        <div className="w-full h-64 md:h-80 overflow-hidden rounded-lg">
+          <MapContainer center={[center.lat, center.lon]} zoom={13} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
+            <ClickHandler />
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {points.map((p, i) => {
+              const dist = distanceKm(center.lat, center.lon, p.lat, p.lon);
+              const dir = bearingToCardinal(bearingDeg(center.lat, center.lon, p.lat, p.lon));
+              const color = p.category === 'Low' ? '#22c55e' : p.category === 'Medium' ? '#eab308' : p.category === 'High' ? '#f97316' : p.category === 'Severe' ? '#ef4444' : '#6b7280';
+              const radius = Math.max(6, Math.min(18, (p.score ?? 10) / 6));
+              return (
+                <CircleMarker key={i} center={[p.lat, p.lon]} pathOptions={{ color, fillColor: color, fillOpacity: 0.6 }} radius={radius}>
+                  <Popup>
+                    <div className="text-sm">
+                      <div><strong>{p.category}</strong> (Score {p.score ?? 'N/A'})</div>
+                      {dayIndex > 0 && <div>Rain: {p.rain_mm ?? 'N/A'} mm</div>}
+                      <div>~{dist.toFixed(1)} km {dir}</div>
+                      <div className="text-xs opacity-80">{p.lat.toFixed(4)}, {p.lon.toFixed(4)}</div>
+                    </div>
+                  </Popup>
+                </CircleMarker>
+              );
+            })}
+            {clicked && (
+              <CircleMarker center={[clicked.lat, clicked.lon]} pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.6 }} radius={12}>
+                <Popup>
+                  <div className="text-sm">
+                    {clickedLoading ? (
+                      <div>Calculating risk…</div>
+                    ) : (
+                      <>
+                        <div><strong>{clicked.category}</strong> (Score {clicked.score ?? 'N/A'})</div>
+                        {dayIndex > 0 && <div>Rain: {clicked.rain_mm ?? 'N/A'} mm</div>}
+                        <div className="text-xs opacity-80">{clicked.lat.toFixed(4)}, {clicked.lon.toFixed(4)}</div>
+                        <div className="mt-1 text-[11px] text-gray-500">Tap elsewhere to check another point.</div>
+                      </>
+                    )}
+                  </div>
+                </Popup>
+              </CircleMarker>
+            )}
+          </MapContainer>
         </div>
       )}
     </div>
