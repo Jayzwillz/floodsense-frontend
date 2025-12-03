@@ -190,6 +190,15 @@ export default function MapView({ center = { lat: 6.5244, lon: 3.3792 } }) {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
+            {/* Center marker */}
+            <CircleMarker center={[center.lat, center.lon]} pathOptions={{ color: '#0ea5e9', fillColor: '#0ea5e9', fillOpacity: 0.8 }} radius={10}>
+              <Popup>
+                <div className="text-sm">
+                  <div className="font-semibold text-blue-300">Your Center</div>
+                  <div className="text-xs opacity-80">{center.lat.toFixed(4)}, {center.lon.toFixed(4)}</div>
+                </div>
+              </Popup>
+            </CircleMarker>
             {points.map((p, i) => {
               const dist = distanceKm(center.lat, center.lon, p.lat, p.lon);
               const dir = bearingToCardinal(bearingDeg(center.lat, center.lon, p.lat, p.lon));

@@ -53,6 +53,8 @@ export default function Dashboard() {
       .then(res => {
         setRisk(prev => {
           const next = res.data;
+          // Persist latest risk for cross-page tips consumption
+          try { localStorage.setItem('floodsense_last_risk', JSON.stringify(next)); } catch {}
           try {
             if (Notification && Notification.permission === 'granted' && prev?.category && next?.category) {
               const escalate = (from, to) => {
@@ -132,10 +134,30 @@ export default function Dashboard() {
     // No cleanup needed
   }, []);
 
+  // Recent alerts polling
+  const [alerts, setAlerts] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadAlerts = async () => {
+      try {
+        const res = await api.get('/api/alerts');
+        if (!cancelled) {
+          const list = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.alerts) ? res.data.alerts : []);
+          setAlerts(list.slice(-5).reverse());
+        }
+      } catch {
+        // ignore
+      }
+    };
+    loadAlerts();
+    const id = setInterval(loadAlerts, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
   return (
     <div className="min-h-[70vh] bg-gray-950 text-gray-100 py-8 px-2 md:px-8 rounded-xl shadow-lg relative">
       {/* Logo */}
-      <img src="/images/logo.png" alt="FloodSense Logo" className="mx-auto mb-4 w-16 h-16 rounded-full shadow border-2 border-blue-500 bg-white object-contain" />
+      <img src="/images/logo.png" alt="FloodSense Logo" className="mx-auto mb-4 w-16 h-16 rounded-full shadow border-2 border-blue-500 object-contain" />
 
       {/* Flood Risk & Prediction */}
       <div className="text-center mb-8">
@@ -339,6 +361,14 @@ export default function Dashboard() {
                 </div>
                 <div className="text-sm text-gray-300">Category: {risk.category}</div>
                 <div className="text-xs text-gray-500">Updated: {new Date(risk.timestamp).toLocaleString()}</div>
+                <div className="mt-2 text-[11px] text-gray-400">Risk score scale: 0–100 (percent)</div>
+                {/* Visual indicator bar */}
+                <div className="mt-2 w-full bg-gray-800 rounded h-2">
+                  <div
+                    className={`h-2 rounded ${risk.category === 'Low' ? 'bg-green-500' : risk.category === 'Medium' ? 'bg-yellow-500' : risk.category === 'High' ? 'bg-orange-500' : 'bg-red-600'}`}
+                    style={{ width: `${Math.max(0, Math.min(100, Number(risk.riskScore || 0)))}%` }}
+                  />
+                </div>
               </div>
             )}
 
@@ -402,7 +432,46 @@ export default function Dashboard() {
         <div className="bg-gray-900 rounded-xl p-6 shadow flex flex-col items-center justify-center min-h-[250px]">
           <h2 className="text-xl font-semibold text-blue-300 mb-2">Water Level History</h2>
           <RiskChart series={forecast?.series || []} />
+          {/* Risk score scale indicator */}
+          {risk && (
+            <div className="mt-3 w-full max-w-sm">
+              <div className="flex items-center justify-between text-[11px] text-gray-400 mb-1">
+                <span>0</span>
+                <span>Risk score (0–100)</span>
+                <span>100</span>
+              </div>
+              <div className="w-full bg-gray-800 rounded h-2">
+                <div
+                  className={`h-2 rounded ${risk.category === 'Low' ? 'bg-green-500' : risk.category === 'Medium' ? 'bg-yellow-500' : risk.category === 'High' ? 'bg-orange-500' : 'bg-red-600'}`}
+                  style={{ width: `${Math.max(0, Math.min(100, Number(risk.riskScore || 0)))}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Recent Alerts */}
+      <div className="bg-gray-900 rounded-xl p-6 shadow mb-8">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xl font-semibold text-blue-300">Recent Alerts</h2>
+          <a href="/alerts" className="text-sm text-blue-400 hover:text-blue-300">View all</a>
+        </div>
+        {alerts.length === 0 ? (
+          <div className="text-sm text-gray-400">No alerts yet.</div>
+        ) : (
+          <ul className="divide-y divide-gray-800">
+            {alerts.map((a, i) => (
+              <li key={i} className="py-2 text-sm flex items-center justify-between">
+                <div>
+                  <div className="text-gray-200">{a.message || a.type || 'Alert'}</div>
+                  <div className="text-[11px] text-gray-500">{a.category || 'Info'} • {a.location || `${coords.lat.toFixed(2)}, ${coords.lon.toFixed(2)}`}</div>
+                </div>
+                <div className="text-[11px] text-gray-500">{a.timestamp ? new Date(a.timestamp).toLocaleString() : ''}</div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* Emergency Contact & Safety Tips */}
@@ -427,7 +496,7 @@ export default function Dashboard() {
 
       {/* Footer Logo */}
       <div className="text-center mt-8">
-        <img src="/images/logo.png" alt="FloodSense Logo" className="mx-auto mb-2 w-12 h-12 rounded-full shadow border-2 border-blue-500 bg-white object-contain" />
+        <img src="/images/logo.png" alt="FloodSense Logo" className="mx-auto mb-2 w-12 h-12 rounded-full shadow border-2 border-blue-500 object-contain" />
         <div className="text-xs text-gray-500">FloodSense &copy; {new Date().getFullYear()}</div>
       </div>
     </div>
