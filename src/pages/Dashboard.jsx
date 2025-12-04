@@ -478,7 +478,7 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row gap-8 justify-center items-start mb-8">
         <div className="bg-gray-900 rounded-xl p-6 shadow w-full md:w-1/2 flex flex-col items-center">
           <h2 className="text-xl font-semibold text-blue-300 mb-2">Emergency Contact</h2>
-          <button className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg shadow mb-2">Call for Help</button>
+          <a href="/help" className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-lg shadow mb-2">Call for Help</a>
           <div className="text-gray-400 text-sm">Notify neighbors, local response teams, or emergency services.</div>
         </div>
         <div className="bg-gray-900 rounded-xl p-6 shadow w-full md:w-1/2 flex flex-col items-center">

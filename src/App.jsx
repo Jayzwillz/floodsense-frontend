@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Alerts from './pages/Alerts'
 import SafetyTips from './pages/SafetyTips'
 import Admin from './pages/Admin'
+import Emergency from './pages/Emergency'
 import Profile from './pages/Profile'
 import './App.css'
 
@@ -127,6 +128,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/help" element={<Emergency />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/safetytips" element={<SafetyTips />} />
           <Route path="/profile" element={<Profile />} />
